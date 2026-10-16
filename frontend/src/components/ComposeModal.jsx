@@ -29,6 +29,7 @@ import { resolveSignatureEnabled } from '../utils/composeSignature.js';
 import { UNDO_SEND_SECONDS, undoWindowMs, trackHeldSend, reopenCompose } from '../utils/heldSend.js';
 import { openSentMessage } from '../utils/openSentMessage.js';
 import { frameGeometry } from '../utils/frameGeometry.js';
+import { AI_MESSAGE_MAX_CHARS } from '../aiActions.js';
 
 // Resize an image blob/file to max maxW pixels wide, preserving aspect ratio.
 // Returns a Promise<string> of a base64 data URL.
@@ -197,7 +198,7 @@ function resolveFrom(val) {
 }
 
 export default function ComposeModal() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { closeCompose, composeData, accounts, addNotification, plaintextEmail, setThreadMessages, setPrepareComposeSwitch, updateComposePersistedKey } = useStore();
   const composeSession = useRef(useStore.getState().composeSession).current;
   const composeOwner = useRef(useStore.getState().user?.id).current;
@@ -818,9 +819,17 @@ export default function ComposeModal() {
       },
     };
     const { system, user } = PROMPTS[action] || PROMPTS.draft;
+    // Improve, Shorten and Grammar replace the whole draft with their result (applyAiText), so
+    // a draft cut to fit the request lost everything past the cut on Apply. One too long is
+    // refused instead (#633).
+    if (user.length > AI_MESSAGE_MAX_CHARS) {
+      const fmt = new Intl.NumberFormat(i18n.language);
+      setAiPanel({ action, status: 'error', text: t('compose.toolbar.aiTooLong', { count: fmt.format(user.length), max: fmt.format(AI_MESSAGE_MAX_CHARS) }) });
+      return;
+    }
     const messages = [
       { role: 'system', content: system },
-      { role: 'user', content: user.slice(0, 16000) },
+      { role: 'user', content: user },
     ];
 
     setAiPanel({ action, status: 'generating', text: '' });
