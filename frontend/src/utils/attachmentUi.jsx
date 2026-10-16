@@ -1,6 +1,5 @@
-// Shared bits for rendering attachment chips. Extracted from MessagePane so contexts that
-// render a body outside the reading pane (the conversation card's AttachmentStrip, #634)
-// show the same icons and sizes.
+// Shared bits for rendering attachment chips, so every view that shows them — the reading
+// pane's AttachmentStrip and the conversation card's (#634) — shows the same icons and sizes.
 export function formatBytes(bytes) {
   if (!bytes) return '';
   if (bytes < 1024) return `${bytes} B`;

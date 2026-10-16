@@ -333,8 +333,9 @@ export default function ConversationMessageCard({ message, expanded, onToggle, o
 
           {/* Attachments, the reading pane's strip (#634): the body response already
               carries them — without this the card dropped the files on the floor and a
-              grouped thread gave no way to see or download an attachment at all. */}
-          <AttachmentStrip messageId={message.id} attachments={body?.attachments} />
+              grouped thread gave no way to see or download an attachment at all. The card
+              owes the strip its spacing; the reading pane's wrapper keeps its own. */}
+          <AttachmentStrip messageId={message.id} attachments={body?.attachments} style={{ marginTop: 12 }} />
 
           {/* Reply and forward are per message, not per thread: replying to a conversation
               means replying to one message in it, and which one decides the recipients and

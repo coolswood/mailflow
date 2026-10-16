@@ -8,13 +8,15 @@ import { fileIcon, formatBytes } from '../utils/attachmentUi.jsx';
 // riskArmed value for the "Download all" link. A Symbol, so no attachment part can ever equal it.
 const DOWNLOAD_ALL = Symbol('download-all');
 
-// Attachments strip for a fetched message body: `attachments` is the array the
-// GET /api/mail/messages/:id response already carries. A port of the reading pane's strip
-// (MessagePane) for bodies rendered outside it — today the conversation-view card, which
-// fetched the same response but dropped the files entirely (#634). Same chips, risk arming,
-// "Download all" and in-app preview as the reading pane; self-contained state. MessagePane
-// keeps its own strip for now (it is wired into its shortcuts/selection state) — unify later.
-export default function AttachmentStrip({ messageId, attachments }) {
+// The attachments strip: `messageId` + `attachments` (the array the GET
+// /api/mail/messages/:id response carries). One component for every view that shows a
+// fetched message body — the reading pane (MessagePane) and the conversation-view card,
+// which fetched the same response but dropped the files entirely (#634). Same chips, risk
+// arming, "Download all" and in-app preview everywhere; state is self-contained, and the
+// caller keys it by message id so navigating away resets a half-confirmed download.
+// `style` lands on the root when the surrounding layout owes the strip a margin of its own
+// (the reading pane's wrapper keeps its own spacing; the card adds the top margin).
+export default function AttachmentStrip({ messageId, attachments, style }) {
   const { t } = useTranslation();
   const [riskArmed, setRiskArmed] = useState(null);
   const [downloadingPart, setDownloadingPart] = useState(null);
@@ -29,6 +31,18 @@ export default function AttachmentStrip({ messageId, attachments }) {
     ['block', 'warn'].includes(classifyAttachmentRisk(att.filename, att.type).level));
   const downloadAllArmed = riskArmed === DOWNLOAD_ALL;
   const downloadAllUrl = `/api/mail/messages/${messageId}/attachments.zip`;
+  const confirmDownloadAll = () => {
+    if (!downloadAllArmed) { setRiskArmed(DOWNLOAD_ALL); return; }
+    setRiskArmed(null);
+    const a = document.createElement('a');
+    a.href = downloadAllUrl;
+    // download, not navigation: an error body (413 over the size cap, 404, an
+    // expired session) must fail in the downloads panel, not replace the app.
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const handleDownload = async (part, filename) => {
     setDownloadingPart(part);
@@ -56,7 +70,7 @@ export default function AttachmentStrip({ messageId, attachments }) {
   if (!list.length) return null;
 
   return (
-    <div>
+    <div style={style}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>
           {t('message.attachment', { count: list.length })}
@@ -66,16 +80,8 @@ export default function AttachmentStrip({ messageId, attachments }) {
             {...(anyRiskyAttachment ? {
               role: 'button',
               tabIndex: 0,
-              onClick: () => {
-                if (!downloadAllArmed) { setRiskArmed(DOWNLOAD_ALL); return; }
-                setRiskArmed(null);
-                const a = document.createElement('a');
-                a.href = downloadAllUrl;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-              },
-              onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } },
+              onClick: confirmDownloadAll,
+              onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); confirmDownloadAll(); } },
             } : { href: downloadAllUrl, download: true })}
             style={{
               fontSize: 12, color: downloadAllArmed ? 'var(--red)' : 'var(--accent)', textDecoration: 'none',
