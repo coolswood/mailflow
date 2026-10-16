@@ -12,6 +12,7 @@ import { MAILER_ID } from '../services/mailerIdentity.js';
 import { generateVCard } from '../utils/vcard.js';
 import { createAccountSmtpTransport } from '../services/smtpTransport.js';
 import { imapManager } from '../index.js';
+import { providerProfile, PROVIDERS } from '../services/imapManager.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { holdSend, cancelSend, getSendStatus } from '../services/sendHold.js';
 import { deleteSentDraft } from './draft.js';
@@ -427,19 +428,28 @@ router.post('/send', async (req, res) => {
     // APPEND so sent mail reliably appears regardless of what the SMTP server does.
     // Gmail is the exception on the non-OAuth side too: its SMTP server always stores the
     // Sent copy itself, even for app-password (IMAP) accounts — APPENDing our own copy
-    // used to store every sent mail twice (#631). Detect Gmail by host so the heuristic
-    // is auth-method agnostic.
-    const isGoogleMailHost = h => /(^|\.)((gmail|googlemail)\.com)$/i.test(String(h || ''));
+    // used to store every sent mail twice (#631). Only trust Gmail to auto-save when the
+    // account both reads Gmail IMAP and sends through Gmail's own SMTP with that mailbox's
+    // own credentials: a Gmail-IMAP account behind SendGrid/SES/smtp-relay.gmail.com never
+    // reaches Gmail's SMTP (the APPEND is then the only Sent copy), a non-Gmail IMAP
+    // account sending via smtp.gmail.com gets its copy in Gmail's mailbox rather than its
+    // own, and smtp_auth_user ≠ auth_user means the copy lands in whoever logged in to
+    // SMTP. A missing Sent copy is worse than a duplicate, so anything ambiguous APPENDs.
+    const isGmailSmtpHost = h => /^smtp\.(gmail|googlemail)\.com$/i.test(String(h || ''));
+    const smtpUser = String(account.smtp_auth_user || '').trim().toLowerCase();
+    const imapUser = String(account.auth_user || '').trim().toLowerCase();
     const serverAutoSaves = !!account.oauth_provider
-      || isGoogleMailHost(account.imap_host)
-      || isGoogleMailHost(account.smtp_host);
+      || (providerProfile(account) === PROVIDERS.google
+        && isGmailSmtpHost(account.smtp_host)
+        && (!smtpUser || smtpUser === imapUser));
 
     // For servers that don't auto-save, generate the raw MIME now so we can APPEND it.
     // Use CRLF newlines ('windows'): RFC 5322 / IMAP APPEND require CRLF. A bare-LF message is
     // stored verbatim by strict servers (e.g. PurelyMail/Dovecot), and downstream clients then
     // mis-parse the headers — the reporter saw Subject and the To display-name dropped (#365). This
-    // only affects non-OAuth accounts (OAuth servers auto-save and skip this path); the SMTP-
-    // delivered copy uses a separate transport that is already CRLF, so only the Sent copy was wrong.
+    // only affects accounts whose server does not auto-save (OAuth and Gmail-over-Gmail accounts
+    // skip this path); the SMTP-delivered copy uses a separate transport that is already CRLF, so
+    // only the Sent copy was wrong.
     let rawMessage = null;
     if (!serverAutoSaves) {
       const streamTransport = nodemailer.createTransport({ streamTransport: true, newline: 'windows' });
