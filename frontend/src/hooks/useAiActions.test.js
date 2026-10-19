@@ -65,11 +65,11 @@ test('a custom action on an HTML-only body sends it whole', async () => {
 });
 
 test('an over-limit body is cut, disclosed, and the flag survives a reload', async () => {
-  const huge = 'Paragraph text. '.repeat(4000);
+  const huge = 'Paragraph text.'.repeat(4000);
   const { content, results } = await runWith('m3', { text: huge }, BUILTIN_SUMMARIZE);
   assert.ok(content.length <= AI_MESSAGE_MAX_CHARS);
-  assert.match(content, /\[Only the first \d+ of 64000 characters/);
-  assert.equal(results.summarize.truncated.total, 64000);
+  assert.match(content, /\[Only the first \d+ of 60000 characters/);
+  assert.equal(results.summarize.truncated.total, 60000);
   assert.deepEqual(getResults('m3').summarize.truncated, results.summarize.truncated);
   // Shown again from the cache: the note comes back with it, no new request.
   const before = sent.length;
@@ -77,7 +77,7 @@ test('an over-limit body is cut, disclosed, and the flag survives a reload', asy
   function Probe() { hook = useAiActions('m3', { text: huge }); return null; }
   const root = createRoot(document.getElementById('root'));
   await React.act(async () => root.render(React.createElement(Probe)));
-  assert.equal(hook.results.summarize.truncated.total, 64000);
+  assert.equal(hook.results.summarize.truncated.total, 60000);
   await React.act(async () => root.unmount());
   assert.equal(sent.length, before);
 });

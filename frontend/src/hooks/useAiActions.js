@@ -4,6 +4,7 @@ import { useStore } from '../store/index.js';
 import { api } from '../utils/api.js';
 import { BUILTIN_SUMMARIZE, buildAiActionContent, summarizePromptForLocale } from '../aiActions.js';
 import { getResults, saveResult, removeResult } from '../aiResults.js';
+import { aiMessageText } from '../utils/aiMessageText.js';
 import { aiRuns } from '../utils/aiRunRegistry.js';
 
 // AI actions on one message, shared by the reading pane and the conversation view (#521).
@@ -56,9 +57,9 @@ export function useAiActions(messageId, body) {
       }
     }
 
-    const textContent = body?.text
-      || body?.html?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-      || '';
+    // The model reads what the user reads: the visible text of the message, without CSS,
+    // quoted history or bare URLs (#646). utils/aiMessageText.js.
+    const textContent = aiMessageText(body);
     if (!textContent) return;
 
     const actionLabel = label(key, action.label);
