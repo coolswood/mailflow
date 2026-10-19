@@ -60,7 +60,9 @@ export function useAiActions(messageId, body) {
     // The model reads what the user reads: the visible text of the message, without CSS
     // or bare URLs (#646). The built-in action also gets trailing quoted history cut;
     // custom actions are sent whole — their prompts may need the thread and the links,
-    // and cutting is lossy on forwards and inline replies (#647 review).
+    // and cutting is lossy on forwards and inline replies (#647 review). aiMessageText
+    // subsumes the linear-time stripTags of 1903651: extraction is DOMParser-based,
+    // linear on hostile input, and leaves no tag debris or CSS either.
     const textContent = aiMessageText(body, { full: !action.builtin });
     if (!textContent) return;
 
