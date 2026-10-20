@@ -5,6 +5,7 @@ import { api } from '../utils/api.js';
 import { BUILTIN_SUMMARIZE, buildAiActionContent, summarizePromptForLocale } from '../aiActions.js';
 import { getResults, saveResult, removeResult } from '../aiResults.js';
 import { aiRuns } from '../utils/aiRunRegistry.js';
+import { stripTags } from '../utils/stripTags.js';
 
 // AI actions on one message, shared by the reading pane and the conversation view (#521).
 //
@@ -57,7 +58,7 @@ export function useAiActions(messageId, body) {
     }
 
     const textContent = body?.text
-      || body?.html?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      || (body?.html ? stripTags(body.html).replace(/\s+/g, ' ').trim() : '')
       || '';
     if (!textContent) return;
 
@@ -73,6 +74,7 @@ export function useAiActions(messageId, body) {
     const { content, truncated } = buildAiActionContent(promptText, textContent);
     try {
       const fullText = await api.ai.chat([{ role: 'user', content }], {
+        purpose: 'summarize',
         signal: ctrl.signal,
         onDelta: (text) => {
           applyIfViewing(r => ({ ...r, [key]: { status: 'loading', text, label: actionLabel, truncated } }));
@@ -83,7 +85,11 @@ export function useAiActions(messageId, body) {
       if (fullText) saveResult(msgId, key, fullText, actionLabel, truncated);
     } catch (err) {
       if (err.name === 'AbortError') return;
-      applyIfViewing(r => ({ ...r, [key]: { status: 'error', text: err.message, label: actionLabel } }));
+      // Refused: AI is off for this user, or summaries are off for everyone (#644).
+      const text = err.code === 'ai_user_disabled' ? t('message.aiNotAllowed')
+        : err.code === 'ai_feature_disabled' ? t('message.aiFeatureOff')
+          : err.message;
+      applyIfViewing(r => ({ ...r, [key]: { status: 'error', text, label: actionLabel } }));
     } finally {
       aiRuns.finish(msgId, key);
     }

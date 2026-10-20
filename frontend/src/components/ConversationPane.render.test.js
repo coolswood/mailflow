@@ -253,6 +253,20 @@ describe('conversation pane', () => {
     assert.equal(body.getAttribute('translate'), 'yes');
   });
 
+  test('an HTML message stays translatable under the translate="no" UI', async () => {
+    // Chrome's translator carries the page's translate="no" into the same-origin frame an HTML
+    // body renders in, so the email has to opt back in inside its own document.
+    await React.act(async () => {
+      root.render(React.createElement(ConversationPane, { key: 'html-body', threadId: '<1@x>', folder: 'INBOX', selectedMessageId: 'm1' }));
+    });
+    await React.act(async () => { await new Promise(r => setTimeout(r, 50)); });
+    const frame = [...document.querySelectorAll('iframe')].find(f => /body of m1/.test(f.getAttribute('srcdoc') ?? ''));
+    assert.ok(frame, 'the HTML body is rendered in a frame');
+    const text = new dom.window.DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html').querySelector('p');
+    assert.ok(text, 'the HTML body reaches the frame');
+    assert.equal(text.closest('[translate]')?.getAttribute('translate'), 'yes');
+  });
+
   // #228: plain text follows a dark theme, and each card can switch back to its original colors.
   test('a plain-text card in a dark theme can be switched to its original colors and back', async (t) => {
     const { useStore } = await import('../store/index.js');
@@ -390,6 +404,7 @@ describe('conversation actions', () => {
     const chat = requests.find(r => r.url.includes('/ai/chat'));
     assert.ok(chat, 'the action went to the AI endpoint');
     assert.match(JSON.parse(chat.body).messages[0].content, /body of m1/, 'with this message\'s text');
+    assert.equal(JSON.parse(chat.body).purpose, 'summarize', 'under the summaries switch (#644)');
     assert.match(card('m1').textContent, /Short summary\./, 'the result is pinned on this message');
     assert.doesNotMatch(card('m3').textContent, /Short summary/, 'and only on this message');
   });
